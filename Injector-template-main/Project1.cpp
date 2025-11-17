@@ -1480,119 +1480,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             PathRemoveFileSpecW(dir);
 
-            // 非提权统一使用 runas 提权启动
             if (!IsProcessElevated())
             {
-                SHELLEXECUTEINFOW sei = {};
-                sei.cbSize = sizeof(sei);
-                sei.fMask = SEE_MASK_NOCLOSEPROCESS;
-                sei.hwnd = hWnd;
-                sei.lpVerb = L"runas";
-                sei.lpFile = g_cxExamPath;
-                sei.lpParameters = nullptr;
-                sei.lpDirectory = dir;
-                sei.nShow = SW_SHOWNORMAL;
-
-                DebugPrintFormat(L"[Launch] Not elevated. Starting with runas...");
-                if (ShellExecuteExW(&sei))
-                {
-                    if (sei.hProcess)
-                    {
-                        g_processHandle = sei.hProcess;
-                        g_processId = GetProcessId(sei.hProcess);
-                        SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动（管理员权限）...");
-                        DebugPrintFormat(L"[Launch] Elevated start success. pid=%lu", g_processId);
-
-                        // 检测及注入 winmm.dll（若未从同目录侧载）
-                        Sleep(1200);
-                        bool loadedLocal = IsModuleLoadedInProcess(g_processHandle, L"winmm.dll", target);
-                        DebugPrintFormat(L"[Launch] Local winmm.dll %ls", loadedLocal ? L"LOADED" : L"NOT loaded");
-                        if (!loadedLocal && FileExistsW(target))
-                        {
-                            DebugPrintFormat(L"[Inject] Try remote LoadLibrary: %ls", target);
-                            HRESULT ihr = InjectDllViaCreateRemoteThread(g_processId, target);
-                            DebugPrintFormat(L"[Inject] Result hr=0x%08X", ihr);
-                            if (SUCCEEDED(ihr))
-                            {
-                                DebugPrintFormat(L"[Inject] Remote load success.");
-                                SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动并完成注入");
-                            }
-                            else
-                            {
-                                WCHAR emsg[512] = {0};
-                                FormatLastErrorMessage((DWORD)((UINT)ihr & 0xFFFF), emsg, _countof(emsg));
-                                DebugPrintFormat(L"[Inject] Remote load failed: %ls", emsg);
-                                SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动，但注入失败");
-                            }
-                        }
-
-                        HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param)->DWORD {
-                            HWND hwndMain = (HWND)param;
-                            if (g_processHandle)
-                            {
-                                WaitForSingleObject(g_processHandle, INFINITE);
-                                CloseHandle(g_processHandle);
-                                g_processHandle = nullptr;
-                            }
-                            if (lstrlenW(g_downloadedFile) > 0)
-                            {
-                                DeleteFileW(g_downloadedFile);
-                                DebugPrintFormat(L"[Cleanup] Deleted %s", g_downloadedFile);
-                                g_downloadedFile[0] = L'\0';
-                            }
-                            PostMessageW(hwndMain, WM_APP + 1, 0, 0);
-                            return 0;
-                        }, hWnd, 0, nullptr);
-                        if (hThread) CloseHandle(hThread);
-
-                        if (g_autoHide)
-                        {
-                            HideWindowToTray(hWnd);
-                        }
-                        else
-                        {
-                            SetForegroundWindow(hWnd);
-                        }
-                        break;
-                    }
-                    else
-                    {
-                        // ShellExecuteExW succeeded but no process handle - might be waiting for elevation
-                        DebugPrintFormat(L"[Launch] Elevated start succeeded but no process handle obtained.");
-                        g_processHandle = nullptr;
-                        g_processId = 0;
-                        SetStatus(hWnd, L"状态：已请求启动，请等待UAC确认...");
-                        break;
-                    }
-                }
-                else
-                {
-                    DWORD g2 = GetLastError();
-                    WCHAR emsg2[512] = {0};
-                    FormatLastErrorMessage(g2, emsg2, _countof(emsg2));
-                    DebugPrintFormat(L"[Launch] Elevated start failed. code=%lu, msg=%ls", g2, emsg2);
-                    
-                    if (g2 == ERROR_CANCELLED)
-                    {
-                        SetStatus(hWnd, L"状态：用户取消了UAC提权对话框");
-                        MessageBoxW(hWnd, L"需要管理员权限才能启动目标程序。\n请重试并在UAC对话框中选择\"是\"。", 
-                            L"需要管理员权限", MB_OK | MB_ICONWARNING);
-                    }
-                    else if (g2 == ERROR_ELEVATION_REQUIRED || g2 == 740)
-                    {
-                        SetStatus(hWnd, L"状态：需要管理员权限");
-                        MessageBoxW(hWnd, L"此操作需要管理员权限。\n请右键点击程序并选择\"以管理员身份运行\"。", 
-                            L"需要管理员权限", MB_OK | MB_ICONERROR);
-                    }
-                    else
-                    {
-                        WCHAR fullMsg[768];
-                        wsprintfW(fullMsg, L"启动失败，错误代码：%lu\n\n%ls\n\n提示：某些系统需要管理员权限才能运行。", g2, emsg2);
-                        SetStatus(hWnd, L"状态：启动失败");
-                        MessageBoxW(hWnd, fullMsg, L"启动失败", MB_OK | MB_ICONERROR);
-                    }
-                    break;
-                }
+                DebugPrintFormat(L"[Launch] Not elevated. Proceeding without elevation.");
             }
 
             PROCESS_INFORMATION pi = {};
@@ -1610,104 +1500,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (!ok)
             {
                 DWORD gle = GetLastError();
-                if (gle == ERROR_ELEVATION_REQUIRED || gle == 740)
-                {
-                    DebugPrintFormat(L"[Launch] CreateProcessW requires elevation (code=%lu). Retrying with runas...", gle);
-                    SHELLEXECUTEINFOW seiElev = {};
-                    seiElev.cbSize = sizeof(seiElev);
-                    seiElev.fMask = SEE_MASK_NOCLOSEPROCESS;
-                    seiElev.hwnd = hWnd;
-                    seiElev.lpVerb = L"runas";
-                    seiElev.lpFile = g_cxExamPath;
-                    seiElev.lpDirectory = dir;
-                    seiElev.nShow = SW_SHOWNORMAL;
-
-                    if (ShellExecuteExW(&seiElev) && seiElev.hProcess)
-                    {
-                        g_processHandle = seiElev.hProcess;
-                        g_processId = GetProcessId(seiElev.hProcess);
-                        SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动（管理员权限）...");
-                        DebugPrintFormat(L"[Launch] Elevated retry success. pid=%lu", g_processId);
-
-                        Sleep(1200);
-                        bool loadedLocal = IsModuleLoadedInProcess(g_processHandle, L"winmm.dll", target);
-                        DebugPrintFormat(L"[Launch] Local winmm.dll %ls", loadedLocal ? L"LOADED" : L"NOT loaded");
-                        if (!loadedLocal && FileExistsW(target))
-                        {
-                            DebugPrintFormat(L"[Inject] Try remote LoadLibrary: %ls", target);
-                            HRESULT ihr = InjectDllViaCreateRemoteThread(g_processId, target);
-                            DebugPrintFormat(L"[Inject] Result hr=0x%08X", ihr);
-                            if (SUCCEEDED(ihr))
-                            {
-                                DebugPrintFormat(L"[Inject] Remote load success.");
-                                SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动并完成注入");
-                            }
-                            else
-                            {
-                                WCHAR emsg[512] = {0};
-                                FormatLastErrorMessage((DWORD)((UINT)ihr & 0xFFFF), emsg, _countof(emsg));
-                                DebugPrintFormat(L"[Inject] Remote load failed: %ls", emsg);
-                                SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：已启动，但注入失败");
-                            }
-                        }
-
-                        HANDLE hThreadElev = CreateThread(nullptr, 0, [](LPVOID param)->DWORD {
-                            HWND hwndMain = (HWND)param;
-                            if (g_processHandle)
-                            {
-                                WaitForSingleObject(g_processHandle, INFINITE);
-                                CloseHandle(g_processHandle);
-                                g_processHandle = nullptr;
-                            }
-                            if (lstrlenW(g_downloadedFile) > 0)
-                            {
-                                DeleteFileW(g_downloadedFile);
-                                DebugPrintFormat(L"[Cleanup] Deleted %s", g_downloadedFile);
-                                g_downloadedFile[0] = L'\0';
-                            }
-                            PostMessageW(hwndMain, WM_APP + 1, 0, 0);
-                            return 0;
-                        }, hWnd, 0, nullptr);
-                        if (hThreadElev) CloseHandle(hThreadElev);
-
-                        if (g_autoHide)
-                        {
-                            HideWindowToTray(hWnd);
-                        }
-                        else
-                        {
-                            SetForegroundWindow(hWnd);
-                        }
-                        break;
-                    }
-                    else
-                    {
-                        DWORD elevErr = GetLastError();
-                        WCHAR emsgElev[512] = {0};
-                        FormatLastErrorMessage(elevErr, emsgElev, _countof(emsgElev));
-                        DebugPrintFormat(L"[Launch] Elevated retry failed. code=%lu, msg=%ls", elevErr, emsgElev);
-                        if (elevErr == ERROR_CANCELLED)
-                        {
-                            SetStatus(hWnd, L"状态：用户取消了UAC提权对话框");
-                            MessageBoxW(hWnd, L"需要管理员权限才能启动目标程序。\n请重试并在UAC对话框中选择\"是\"。", 
-                                L"需要管理员权限", MB_OK | MB_ICONWARNING);
-                        }
-                        else
-                        {
-                            WCHAR fullMsg[768];
-                            wsprintfW(fullMsg, L"启动失败，错误代码：%lu\n\n%ls", elevErr, emsgElev);
-                            SetStatus(hWnd, L"状态：启动失败");
-                            MessageBoxW(hWnd, fullMsg, L"启动失败", MB_OK | MB_ICONERROR);
-                        }
-                        break;
-                    }
-                }
-
                 WCHAR emsg[512] = {0};
                 FormatLastErrorMessage(gle, emsg, _countof(emsg));
-                SetStatus(hWnd, L"状态：启动失败，请检查文件是否可执行");
-                DebugPrintFormat(L"[Launch] CreateProcessW failed. code=%lu, msg=%s", gle, emsg);
+                DebugPrintFormat(L"[Launch] CreateProcessW failed. code=%lu, msg=%ls", gle, emsg);
                 DebugPrintFormat(L"[Launch] Path=%s, WorkDir=%s", g_cxExamPath, dir);
+
+                if (gle == ERROR_ELEVATION_REQUIRED || gle == 740)
+                {
+                    SetStatus(hWnd, L"状态：启动失败（需要管理员权限）");
+                    MessageBoxW(hWnd,
+                        L"目标程序需要管理员权限才能启动。\n"
+                        L"请右键点击本程序并选择\"以管理员身份运行\"后重试。",
+                        L"提示：需要管理员权限",
+                        MB_OK | MB_ICONWARNING);
+                }
+                else
+                {
+                    WCHAR fullMsg[768];
+                    wsprintfW(fullMsg, L"启动失败，错误代码：%lu\n\n%ls", gle, emsg);
+                    SetStatus(hWnd, L"状态：启动失败");
+                    MessageBoxW(hWnd, fullMsg, L"启动失败", MB_OK | MB_ICONERROR);
+                }
                 break;
             }
 
