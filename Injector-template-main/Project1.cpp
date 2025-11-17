@@ -55,6 +55,91 @@ static std::wstring g_configFilePath;
 static NOTIFYICONDATAW g_trayIconData = {};
 static bool g_trayIconVisible = false;
 static HWND g_aiWindow = nullptr;
+static WCHAR g_logFilePath[MAX_PATH] = L"";
+static CRITICAL_SECTION g_logCS;
+static bool g_logInitialized = false;
+
+// 初始化日志系统
+static void InitLogSystem() {
+    if (g_logInitialized) return;
+    
+    InitializeCriticalSection(&g_logCS);
+    
+    WCHAR exePath[MAX_PATH] = L"";
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    PathRemoveFileSpecW(exePath);
+    
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    wsprintfW(g_logFilePath, L"%s\\Injector_Log_%04d%02d%02d_%02d%02d%02d.txt", 
+        exePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    
+    HANDLE hFile = CreateFileW(g_logFilePath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, 
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        WCHAR header[512];
+        wsprintfW(header, L"\xFEFF=== Injector 日志文件 ===\r\n启动时间: %04d-%02d-%02d %02d:%02d:%02d\r\n"
+            L"日志路径: %s\r\n\r\n", 
+            st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, g_logFilePath);
+        DWORD written = 0;
+        WriteFile(hFile, header, lstrlenW(header) * sizeof(WCHAR), &written, nullptr);
+        CloseHandle(hFile);
+    }
+    
+    g_logInitialized = true;
+}
+
+// 写入日志到文件（线程安全）
+static void WriteLogToFile(const WCHAR* level, const WCHAR* message) {
+    if (!g_logInitialized) return;
+    
+    EnterCriticalSection(&g_logCS);
+    
+    HANDLE hFile = CreateFileW(g_logFilePath, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
+        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile != INVALID_HANDLE_VALUE) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        
+        WCHAR logLine[2048];
+        wsprintfW(logLine, L"[%02d:%02d:%02d.%03d] [%s] %s\r\n",
+            st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, level, message);
+        
+        DWORD written = 0;
+        WriteFile(hFile, logLine, lstrlenW(logLine) * sizeof(WCHAR), &written, nullptr);
+        CloseHandle(hFile);
+    }
+    
+    LeaveCriticalSection(&g_logCS);
+}
+
+// 统一日志函数（支持格式化，同时写入控制台和文件）
+static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...) {
+    WCHAR message[1024] = {0};
+    va_list args;
+    va_start(args, fmt);
+    _vsnwprintf_s(message, _countof(message), _TRUNCATE, fmt, args);
+    va_end(args);
+    
+    // 写入文件
+    WriteLogToFile(level, message);
+    
+    // 写入控制台（如果存在）
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut && hOut != INVALID_HANDLE_VALUE) {
+        WCHAR consoleLine[1280];
+        wsprintfW(consoleLine, L"[%s] %s", level, message);
+        DWORD written = 0;
+        WriteConsoleW(hOut, consoleLine, lstrlenW(consoleLine), &written, nullptr);
+        WriteConsoleW(hOut, L"\r\n", 2, &written, nullptr);
+    }
+}
+
+// 便捷的日志宏
+#define LogInfo(fmt, ...)    LogMessage(L"INFO", fmt, ##__VA_ARGS__)
+#define LogWarn(fmt, ...)    LogMessage(L"WARN", fmt, ##__VA_ARGS__)
+#define LogError(fmt, ...)   LogMessage(L"ERROR", fmt, ##__VA_ARGS__)
+#define LogDebug(fmt, ...)   LogMessage(L"DEBUG", fmt, ##__VA_ARGS__)
 
 // 调试控制台：创建并输出
 static void SetupDebugConsole() {
@@ -64,17 +149,22 @@ static void SetupDebugConsole() {
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
         if (hOut && hOut != INVALID_HANDLE_VALUE) {
             DWORD written = 0;
-            WriteConsoleW(hOut, L"[Console] Allocated debug console.\r\n", 34, &written, nullptr);
+            WriteConsoleW(hOut, L"[Console] Allocated debug console.\r\n", 37, &written, nullptr);
         }
+        LogInfo(L"调试控制台已分配");
     }
 }
 
-// 统一打印（宽字符）
+// 统一打印（宽字符）- 保留向后兼容
 static void DebugPrintFormat(const WCHAR* fmt, ...) {
     WCHAR line[1024] = {0};
     va_list args; va_start(args, fmt);
     _vsnwprintf_s(line, _countof(line), _TRUNCATE, fmt, args);
     va_end(args);
+    
+    // 同时写入日志文件
+    WriteLogToFile(L"DEBUG", line);
+    
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut && hOut != INVALID_HANDLE_VALUE) {
         DWORD written = 0;
@@ -655,8 +745,7 @@ static void LoadAiConfig()
     GetPrivateProfileStringW(L"AI", L"Model", g_aiConfig.model, g_aiConfig.model, 128, configPath);
     g_autoHide = GetPrivateProfileIntW(L"Settings", L"AutoHide", 1, configPath) != 0;
     
-    DebugPrintFormat(L"[Config] Loaded: Endpoint=%ls, Model=%ls, AutoHide=%d", 
-        g_aiConfig.endpoint, g_aiConfig.model, g_autoHide);
+    LogInfo(L"AI配置已加载: Endpoint=%s, Model=%s, AutoHide=%d", g_aiConfig.endpoint, g_aiConfig.model, g_autoHide);
 }
 
 static void SaveAiConfig()
@@ -985,42 +1074,89 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+    InitLogSystem();
+    LogInfo(L"程序启动，命令行: %s", GetCommandLineW());
+
     SetupDebugConsole();
-    DebugPrintFormat(L"[Boot] Injector started. CmdLine: %ls", GetCommandLineW());
+    LogInfo(L"命令行（再次）: %s", GetCommandLineW());
 
     LoadAiConfig();
     
-    RelaunchSelfElevatedIfNeeded();
+    // 不再强制提权，在需要时再提示
+    LogInfo(L"当前进程是否提权: %d", IsProcessElevated());
 
     // TODO: 在此处放置代码。
 
     // 初始化 COM（用于文件夹选择对话框等）
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCo))
+    {
+        LogError(L"COM初始化失败，错误代码: 0x%08X", hrCo);
+    }
+    else
+    {
+        LogInfo(L"COM初始化成功");
+    }
+    
     // 初始化 GDI+
     GdiplusStartupInput gdiplusStartupInput;
-    if (GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr) != Ok)
+    Status gdipStatus = GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    if (gdipStatus != Ok)
     {
         g_gdiplusToken = 0;
+        LogError(L"GDI+初始化失败，状态码: %d", (int)gdipStatus);
+    }
+    else
+    {
+        LogInfo(L"GDI+初始化成功");
     }
 
     // 初始化全局字符串
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
     LoadStringW(hInstance, IDC_PROJECT1, szWindowClass, MAX_LOADSTRING);
-    MyRegisterClass(hInstance);
+    LogInfo(L"窗口标题: %s, 窗口类: %s", szTitle, szWindowClass);
+    
+    ATOM classAtom = MyRegisterClass(hInstance);
+    if (!classAtom)
+    {
+        DWORD err = GetLastError();
+        LogError(L"注册窗口类失败，错误代码: %lu", err);
+        MessageBoxW(nullptr, L"注册窗口类失败！请查看日志文件。", L"启动错误", MB_OK | MB_ICONERROR);
+        return FALSE;
+    }
+    LogInfo(L"窗口类注册成功，Atom: 0x%04X", classAtom);
 
     // 执行应用程序初始化:
     if (!InitInstance (hInstance, nCmdShow))
     {
+        LogError(L"InitInstance 失败");
+        MessageBoxW(nullptr, L"创建主窗口失败！请查看日志文件。", L"启动错误", MB_OK | MB_ICONERROR);
         return FALSE;
     }
+    LogInfo(L"InitInstance 成功，窗口已创建");
 
     HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_PROJECT1));
 
     MSG msg;
 
+    LogInfo(L"进入主消息循环");
+
     // 主消息循环:
-    while (GetMessage(&msg, nullptr, 0, 0))
+    while (true)
     {
+        BOOL gm = GetMessage(&msg, nullptr, 0, 0);
+        if (gm == -1)
+        {
+            DWORD err = GetLastError();
+            LogError(L"GetMessage 返回错误，代码: %lu", err);
+            break;
+        }
+        if (gm == 0)
+        {
+            LogInfo(L"收到 WM_QUIT，退出消息循环");
+            break;
+        }
+
         if (!TranslateAccelerator(msg.hwnd, hAccelTable, &msg))
         {
             TranslateMessage(&msg);
@@ -1029,9 +1165,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     if (g_hImageBmp) { DeleteObject(g_hImageBmp); g_hImageBmp = nullptr; }
-    if (g_gdiplusToken) GdiplusShutdown(g_gdiplusToken);
-    if (SUCCEEDED(hrCo)) CoUninitialize();
+    if (g_gdiplusToken)
+    {
+        GdiplusShutdown(g_gdiplusToken);
+        LogInfo(L"GDI+ 已关闭");
+    }
+    if (SUCCEEDED(hrCo))
+    {
+        CoUninitialize();
+        LogInfo(L"COM 已卸载");
+    }
 
+    LogInfo(L"程序退出，返回代码: %d", (int)msg.wParam);
     return (int) msg.wParam;
 }
 
@@ -1076,24 +1221,37 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
    hInst = hInstance; // 将实例句柄存储在全局变量中
+   LogInfo(L"InitInstance: hInstance=0x%p, nCmdShow=%d", hInstance, nCmdShow);
 
    DWORD dwStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
    RECT rc = {0, 0, 640, 200};
-   AdjustWindowRect(&rc, dwStyle, FALSE);
+   if (!AdjustWindowRect(&rc, dwStyle, FALSE))
+   {
+       DWORD err = GetLastError();
+       LogError(L"AdjustWindowRect 失败，错误代码: %lu", err);
+   }
    int winW = rc.right - rc.left;
    int winH = rc.bottom - rc.top;
+   LogInfo(L"窗口计算尺寸: %d x %d", winW, winH);
+
    HWND hWnd = CreateWindowW(szWindowClass, szTitle,
       dwStyle,
       CW_USEDEFAULT, 0, winW, winH, nullptr, nullptr, hInstance, nullptr);
 
    if (!hWnd)
    {
+      DWORD err = GetLastError();
+      LogError(L"CreateWindowW 失败，错误代码: %lu", err);
       return FALSE;
    }
 
+   LogInfo(L"主窗口句柄: 0x%p", hWnd);
+
    CenterWindowOnScreen(hWnd);
+   LogInfo(L"窗口已居中");
    ShowWindow(hWnd, nCmdShow);
    UpdateWindow(hWnd);
+   LogInfo(L"窗口已显示和更新");
 
    return TRUE;
 }
@@ -1114,6 +1272,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_CREATE:
         {
+            LogInfo(L"WM_CREATE 开始，hWnd=0x%p", hWnd);
             // 第一阶段 UI
             CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
                 WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
@@ -1141,11 +1300,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 0, 0, 10, 10, hWnd, (HMENU)IDC_STATIC_IMAGE, hInst, nullptr);
             RepositionImageAndText(hWnd);
             ApplyUIFont(hWnd);
+            LogInfo(L"第一阶段控件已创建");
 
             CreateWindowW(L"STATIC", L"powered by sjyssr",
                 WS_CHILD | WS_VISIBLE | SS_CENTER,
                 0, 0, 10, 10, hWnd, (HMENU)IDC_STATIC_FOOTER, hInst, nullptr);
             RepositionFooter(hWnd);
+            LogInfo(L"WM_CREATE 完成");
         }
         break;
     case WM_COMMAND:
@@ -1393,27 +1554,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             // 已移除下载按钮逻辑（合并至启动流程）
             case IDC_BTN_LAUNCH:
         {
+            LogInfo(L"用户点击启动按钮");
             if (lstrlenW(g_cxExamPath) == 0)
             {
                 SetStatus(hWnd, L"状态：未选择 CXExam.exe");
-                DebugPrintFormat(L"[Launch] No CXExam.exe selected.");
+                LogError(L"未选择 CXExam.exe");
                 break;
             }
+            LogInfo(L"目标EXE: %s", g_cxExamPath);
 
             WCHAR folder[MAX_PATH] = L"";
             if (FAILED(StringCchCopyW(folder, _countof(folder), g_cxExamPath))) {
                 SetStatus(hWnd, L"状态：路径复制失败（CXExam.exe）");
-                DebugPrintFormat(L"[Launch] Failed to copy CXExam.exe path.");
+                LogError(L"复制路径失败：%s", g_cxExamPath);
                 break;
             }
             PathRemoveFileSpecW(folder);
+            LogInfo(L"工作目录: %s", folder);
 
             WCHAR target[MAX_PATH] = L"";
             if (FAILED(StringCchPrintfW(target, _countof(target), L"%s\\winmm.dll", folder))) {
                 SetStatus(hWnd, L"状态：路径拼接失败（winmm.dll）");
-                DebugPrintFormat(L"[Launch] Failed to compose winmm.dll path.");
+                LogError(L"拼接 winmm.dll 路径失败");
                 break;
             }
+            LogInfo(L"DLL 目标路径: %s", target);
 
             // 若 winmm.dll 已存在且非空，跳过下载
             if (FileExistsW(target) && GetFileSizeU64(target) > 0)
@@ -1508,21 +1673,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 if (gle == ERROR_ELEVATION_REQUIRED || gle == 740)
                 {
                     SetStatus(hWnd, L"状态：启动失败（需要管理员权限）");
-                    MessageBoxW(hWnd,
-                        L"目标程序需要管理员权限才能启动。\n"
-                        L"请右键点击本程序并选择\"以管理员身份运行\"后重试。",
-                        L"提示：需要管理员权限",
-                        MB_OK | MB_ICONWARNING);
+                    LogError(L"CreateProcessW 失败 - 错误 740：需要管理员权限");
+                    WCHAR logMsg[512];
+                    wsprintfW(logMsg, L"提示：请查看日志文件 %s\n\n目标程序需要管理员权限才能启动。\n请右键点击本程序并选择\"以管理员身份运行\"后重试。", g_logFilePath);
+                    MessageBoxW(hWnd, logMsg, L"需要管理员权限", MB_OK | MB_ICONWARNING);
                 }
                 else
                 {
                     WCHAR fullMsg[768];
-                    wsprintfW(fullMsg, L"启动失败，错误代码：%lu\n\n%ls", gle, emsg);
+                    wsprintfW(fullMsg, L"启动失败，错误代码：%lu\n\n%ls\n\n请查看日志文件：\n%s", gle, emsg, g_logFilePath);
                     SetStatus(hWnd, L"状态：启动失败");
+                    LogError(L"CreateProcessW 失败 - 代码 %lu：%s", gle, emsg);
                     MessageBoxW(hWnd, fullMsg, L"启动失败", MB_OK | MB_ICONERROR);
                 }
                 break;
             }
+            LogInfo(L"CreateProcessW 成功，PID=%lu", pi.dwProcessId);
 
             g_processHandle = pi.hProcess;
             g_processId = pi.dwProcessId;

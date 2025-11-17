@@ -39,3 +39,7 @@ Injector-template-main/Release/
 Injector-template-main/x64/Debug/
 Injector-template-main/x64/Release/
 Injector-template-main/.vs/
+
+# Log files
+Injector_Log_*.txt
+*.log
