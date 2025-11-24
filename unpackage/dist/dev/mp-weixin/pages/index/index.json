@@ -1,0 +1,8 @@
+{
+  "navigationBarBackgroundColor": "#EF96C5",
+  "navigationBarTextStyle": "white",
+  "navigationBarTitleText": "在线心理健康咨询平台首页",
+  "usingComponents": {
+    "uni-icons": "/components/uni-ui/lib/uni-icons/uni-icons"
+  }
+}

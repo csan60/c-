@@ -1,0 +1,9 @@
+{
+  "name": "checkVersion",
+  "dependencies": {
+    "checkVersion": "file:"
+  },
+  "extensions": {
+    "uni-cloud-jql": {}
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "navigationBarBackgroundColor": "#EF96C5",
+  "navigationBarTextStyle": "white",
+  "navigationBarTitleText": "心理健康留言展示",
+  "usingComponents": {
+    "mescroll-uni": "/components/mescroll-uni/mescroll-uni"
+  }
+}
