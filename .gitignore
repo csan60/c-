@@ -1,0 +1,81 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+.hbuilderx/
+*.iml
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Uni-App
+unpackage/
+.gradle/
+node_modules/
+
+# Java / Spring Boot
+project20250624gpp03-main/backend/target/
+project20250624gpp03-main/backend/.mvn/
+project20250624gpp03-main/backend/mvnw
+project20250624gpp03-main/backend/mvnw.cmd
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Python
+project20250624gpp03-main/backend-python/__pycache__/
+project20250624gpp03-main/backend-python/*.py[cod]
+project20250624gpp03-main/backend-python/*$py.class
+project20250624gpp03-main/backend-python/.Python
+project20250624gpp03-main/backend-python/venv/
+project20250624gpp03-main/backend-python/env/
+project20250624gpp03-main/backend-python/.env
+project20250624gpp03-main/backend-python/*.egg-info/
+project20250624gpp03-main/backend-python/dist/
+project20250624gpp03-main/backend-python/build/
+
+# Vue / Node
+project20250624gpp03-main/vue-ui/node_modules/
+project20250624gpp03-main/vue-ui/dist/
+project20250624gpp03-main/vue-ui/.env.local
+project20250624gpp03-main/vue-ui/.env.*.local
+project20250624gpp03-main/vue-ui/npm-debug.log*
+project20250624gpp03-main/vue-ui/yarn-debug.log*
+project20250624gpp03-main/vue-ui/yarn-error.log*
+project20250624gpp03-main/vue-ui/pnpm-debug.log*
+
+# Sensitive config files (IMPORTANT: Do not commit!)
+**/application-*.yml
+**/application-*.yaml
+**/.env
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+
+# Logs
+*.log
+logs/
+log/
+
+# Database
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
