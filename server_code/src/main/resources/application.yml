@@ -1,0 +1,86 @@
+# Tomcat
+server:
+  tomcat:
+    uri-encoding: UTF-8
+    max-swallow-size: 300MB
+    max-http-post-size: 300MB
+    # 设置文件上传大小限制
+    max-file-size: 300MB
+    max-request-size: 300MB
+  port: 8080
+  servlet:
+    context-path: /project
+  address: 0.0.0.0
+
+
+spring:
+  datasource:
+    driverClassName: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3307/project?useUnicode=true&characterEncoding=utf-8&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=GMT%2B8&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: mgf123
+  servlet:
+    multipart:
+      max-file-size: 300MB
+      max-request-size: 300MB
+  resources:
+    static-locations: classpath:static/,file:static/
+
+#mybatis
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  #实体扫描，多个package用逗号或者分号分隔
+  typeAliasesPackage: com.cl.entity
+  global-config:
+    #主键类型  0:"数据库ID自增", 1:"用户输入ID",2:"全局唯一ID (数字类型唯一ID)", 3:"全局唯一ID UUID";
+    id-type: 1
+    #字段策略 0:"忽略判断",1:"非 NULL 判断"),2:"非空判断"
+    field-strategy: 1
+    #驼峰下划线转换
+    db-column-underline: true
+    #刷新mapper 调试神器
+    refresh-mapper: true
+    #逻辑删除配置
+    logic-delete-value: -1
+    logic-not-delete-value: 0
+    #自定义SQL注入器
+    sql-injector: com.baomidou.mybatisplus.mapper.LogicSqlInjector
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+    call-setters-on-nulls: true
+    #springboot 项目mybatis plus 设置 jdbcTypeForNull (oracle数据库需配置JdbcType.NULL, 默认是Other)
+    jdbc-type-for-null: 'null' 
+
+# 文件存储配置
+file:
+  storage:
+    type: oss  # 可选值: local, oss
+
+# 阿里云OSS配置
+aliyun:
+  oss:
+    # OSS访问域名（根据你的bucket所在区域选择）
+    endpoint: https://oss-cn-beijing.aliyuncs.com
+    # 访问密钥ID（从阿里云控制台获取）
+    accessKeyId: LTAI5t9uyFw8i9XCVzxXapJP
+    # 访问密钥Secret（从阿里云控制台获取）
+    accessKeySecret: c4syrrRiNyH4kRNCp27tVAKTgYuGcv
+    # 存储空间名称
+    bucketName: wechatoldpeople
+    # 自定义域名（可选，如果配置了CDN加速域名）
+    domain: https://wechatoldpeople.oss-cn-beijing.aliyuncs.com
+
+wx:
+    appid: wx19c4b7134978fd5e
+    secret: 4a991509cee2f3b94649f0809d42d3fd
+
+
+ai:
+  xunfei:
+    app-id: "359c2cb8"
+    api-key: "8e0e674afe071c0f848d9236833680d6"
+    api-secret: "ZDg0OTgzYmE5NmZiNmExODhhNzhlZjlh"
+    asr-url: "wss://iat.xf-yun.com/v1"   # 最新中英识别 WebSocket 地址
+
+

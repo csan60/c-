@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cl.dao.ChatMessageDao">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.cl.entity.ChatMessage">
+        <id column="id" property="id" />
+        <result column="sender_id" property="senderId" />
+        <result column="sender_table" property="senderTable" />
+        <result column="receiver_id" property="receiverId" />
+        <result column="receiver_table" property="receiverTable" />
+        <result column="content" property="content" />
+        <result column="msg_type" property="msgType" />
+        <result column="is_read" property="isRead" />
+        <result column="create_time" property="createTime" />
+        <result column="read_time" property="readTime" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, sender_id, sender_table, receiver_id, receiver_table, content, msg_type, is_read, create_time, read_time
+    </sql>
+
+    <select id="selectListView" parameterType="map" resultType="com.cl.entity.view.ChatMessageView" >
+        SELECT <include refid="Base_Column_List" />
+        FROM chat_message
+        <where>
+            ${ew.sqlSegment}
+        </where>
+    </select>
+
+    <select id="selectView" parameterType="map" resultType="com.cl.entity.view.ChatMessageView" >
+        SELECT * FROM chat_message
+        <where>
+            ${ew.sqlSegment}
+        </where>
+    </select>
+
+</mapper>

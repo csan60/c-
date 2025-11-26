@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cl.dao.HuanzheDao">
+
+    <!-- 可根据自己的需求，是否要使用 -->
+    <resultMap type="com.cl.entity.HuanzheEntity" id="huanzheMap">
+        <result property="huanzhezhanghao" column="huanzhezhanghao"/>
+        <result property="mima" column="mima"/>
+        <result property="huanzhexingming" column="huanzhexingming"/>
+        <result property="touxiang" column="touxiang"/>
+        <result property="xingbie" column="xingbie"/>
+        <result property="shoujihaoma" column="shoujihaoma"/>
+        <result property="nianling" column="nianling"/>
+        <result property="mobile" column="mobile"/>
+    </resultMap>
+
+    <select id="selectListView"
+            resultType="com.cl.entity.view.HuanzheView">
+
+        SELECT huanzhe.* FROM huanzhe huanzhe
+        <where>1=1 ${ew.sqlSegment}</where>
+    </select>
+
+    <select id="selectView"
+            resultType="com.cl.entity.view.HuanzheView">
+        SELECT * FROM huanzhe huanzhe
+        <where>1=1 ${ew.sqlSegment}</where>
+    </select>
+
+
+    <select id="selectValue" resultType="map">
+        SELECT ${params.xColumn}, ROUND(sum(${params.yColumn}),1) total FROM huanzhe
+        <where>1=1 ${ew.sqlSegment}</where>
+        group by ${params.xColumn}
+        limit 10
+    </select>
+
+    <select id="selectTimeStatValue" resultType="map">
+        <if test='params.timeStatType == "日"'>
+            SELECT DATE_FORMAT(${params.xColumn},'%Y-%m-%d') ${params.xColumn}, sum(${params.yColumn}) total FROM
+            huanzhe
+            <where>1=1 ${ew.sqlSegment}</where>
+            group by DATE_FORMAT(${params.xColumn},'%Y-%m-%d')
+        </if>
+        <if test='params.timeStatType == "月"'>
+            SELECT DATE_FORMAT(${params.xColumn},'%Y-%m') ${params.xColumn}, sum(${params.yColumn}) total FROM huanzhe
+            <where>1=1 ${ew.sqlSegment}</where>
+            group by DATE_FORMAT(${params.xColumn},'%Y-%m')
+        </if>
+        <if test='params.timeStatType == "年"'>
+            SELECT DATE_FORMAT(${params.xColumn},'%Y') ${params.xColumn}, sum(${params.yColumn}) total FROM huanzhe
+            <where>1=1 ${ew.sqlSegment}</where>
+            group by DATE_FORMAT(${params.xColumn},'%Y')
+        </if>
+    </select>
+
+    <select id="selectGroup" resultType="map">
+        SELECT ${params.column} , count(1) total FROM huanzhe
+        <where>1=1 ${ew.sqlSegment}</where>
+        group by ${params.column}
+        limit 10
+    </select>
+
+
+</mapper>

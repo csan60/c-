@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.cl.dao.ZuozhenyishengDao">
+
+    <!-- 可根据自己的需求，是否要使用 -->
+    <resultMap type="com.cl.entity.ZuozhenyishengEntity" id="zuozhenyishengMap">
+        <result property="yishengzhanghao" column="yishengzhanghao"/>
+        <result property="yishengxingming" column="yishengxingming"/>
+        <result property="keshi" column="keshi"/>
+        <result property="touxiang" column="touxiang"/>
+        <result property="jiuzhenshijian" column="jiuzhenshijian"/>
+        <result property="guahaofei" column="guahaofei"/>
+        <result property="renshu" column="renshu"/>
+        <result property="jianjie" column="jianjie"/>
+        <result property="lianxidianhua" column="lianxidianhua"/>
+        <result property="storeupNumber" column="storeup_number"/>
+        <result property="discussNumber" column="discuss_number"/>
+    </resultMap>
+
+    <select id="selectListView"
+            resultType="com.cl.entity.view.ZuozhenyishengView">
+
+        SELECT zuozhenyisheng.* FROM zuozhenyisheng zuozhenyisheng
+        <where>1=1 ${ew.sqlSegment}</where>
+    </select>
+
+    <select id="selectView"
+            resultType="com.cl.entity.view.ZuozhenyishengView">
+        SELECT * FROM zuozhenyisheng zuozhenyisheng
+        <where>1=1 ${ew.sqlSegment}</where>
+    </select>
+
+
+</mapper>
