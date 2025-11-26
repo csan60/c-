@@ -31,6 +31,15 @@
 - 教学数据分析可视化
 - 构建"教-学-评-练"一体化智能教育生态
 
+### 环境版本要求与兼容性
+
+- **JDK 17 必需**：ITAP 后端采用 Spring Boot 3.4.3，该版本要求最低 JDK 17（Spring Boot 3.x 不再支持 JDK 8/11）。
+- **Maven 3.8+ 推荐**：与 JDK 17 兼容性最佳，避免插件不兼容问题。
+- **Python 3.9-3.11**：FastAPI 及模型依赖（如 torch、faiss、langchain）在这些版本上最稳定。Python 3.13 尚未被各依赖全面支持。
+- **Node.js 18+**：Vue 3 + Vite 6 默认要求。
+
+> 如确实需要使用 JDK 8，必须将 Spring Boot 降级至 2.7.x，并同步调整 MyBatis-Plus 等依赖版本，建议谨慎评估工作量。
+
 ---
 
 ## 详细目录结构
