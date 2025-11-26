@@ -10,11 +10,11 @@
 
 | 软件 | 版本要求 | 下载地址 | 用途 |
 |-----|---------|---------|-----|
-| **JDK** | 17 | [Oracle](https://www.oracle.com/java/technologies/downloads/#java17) / [OpenJDK](https://adoptium.net/) | Java 后端运行环境 |
-| **Maven** | 3.8+ | [官网](https://maven.apache.org/download.cgi) | Java 项目构建（或使用项目自带 mvnw） |
+| **JDK** | 1.8 (JDK 8) | [Oracle](https://www.oracle.com/java/technologies/javase/javase8-archive-downloads.html) / [OpenJDK](https://adoptium.net/temurin/releases/?version=8) | Java 后端运行环境 |
+| **Maven** | 3.6.3 | [官网](https://maven.apache.org/download.cgi) | Java 项目构建（或使用项目自带 mvnw） |
 | **MySQL** | 8.0+ | [官网](https://dev.mysql.com/downloads/mysql/) | 关系型数据库 |
 | **Redis** | 6.0+ | [官网](https://redis.io/download) | 缓存数据库 |
-| **Python** | 3.9+ | [官网](https://www.python.org/downloads/) | Python 服务运行环境 |
+| **Python** | 3.13 | [官网](https://www.python.org/downloads/) | Python 服务运行环境 |
 | **Node.js** | 18+ | [官网](https://nodejs.org/) | Vue 前端开发环境 |
 | **Git** | 2.x | [官网](https://git-scm.com/) | 版本控制 |
 | **HBuilderX** | 3.x/4.x | [官网](https://www.dcloud.io/hbuilderx.html) | Uni-App 开发工具（可选） |
@@ -625,9 +625,9 @@ Error: Unsupported class file major version
 java -version
 javac -version
 
-# 应显示 Java 17
+# 应显示 Java 8
 # 如果不是，设置 JAVA_HOME
-export JAVA_HOME=/path/to/jdk-17
+export JAVA_HOME=/path/to/jdk-8
 export PATH=$JAVA_HOME/bin:$PATH
 
 # Windows
@@ -751,7 +751,7 @@ export default defineConfig({
 
 2. **配置 JDK**
    - `File` → `Project Structure` → `Project`
-   - SDK 选择 Java 17
+   - SDK 选择 Java 1.8 (Java 8)
 
 3. **安装插件**
    - Lombok
