@@ -1,0 +1,51 @@
+{
+  "name": "mental-health-assessment-system",
+  "version": "1.0.0",
+  "description": "College Student Mental Health Assessment Management System - A uni-app based cross-platform application",
+  "main": "main.js",
+  "scripts": {
+    "dev:h5": "cross-env NODE_ENV=development UNI_PLATFORM=h5 uni",
+    "build:h5": "cross-env NODE_ENV=production UNI_PLATFORM=h5 uni build",
+    "dev:mp-weixin": "cross-env NODE_ENV=development UNI_PLATFORM=mp-weixin uni",
+    "build:mp-weixin": "cross-env NODE_ENV=production UNI_PLATFORM=mp-weixin uni build",
+    "dev:app-plus": "cross-env NODE_ENV=development UNI_PLATFORM=app-plus uni",
+    "build:app-plus": "cross-env NODE_ENV=production UNI_PLATFORM=app-plus uni build",
+    "lint": "eslint --ext .js,.vue .",
+    "lint:fix": "eslint --ext .js,.vue . --fix",
+    "format": "prettier --write \"**/*.{js,vue,json,css,scss,md}\""
+  },
+  "keywords": [
+    "uni-app",
+    "mental-health",
+    "assessment",
+    "cross-platform",
+    "vue",
+    "wechat-miniprogram"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vue": "^2.6.14"
+  },
+  "devDependencies": {
+    "@dcloudio/uni-cli-shared": "latest",
+    "@dcloudio/uni-helper-json": "latest",
+    "@dcloudio/types": "latest",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.50.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-vue": "^9.17.0",
+    "prettier": "^3.0.3",
+    "sass": "^1.68.0",
+    "sass-loader": "^13.3.2"
+  },
+  "engines": {
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
+  },
+  "browserslist": [
+    "Android >= 4.4",
+    "iOS >= 9"
+  ]
+}

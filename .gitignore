@@ -1,0 +1,50 @@
+# IDE Folders
+.hbuilderx/
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Build & Distribution
+unpackage/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Temporary Files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Lock Files (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Testing
+coverage/
+.nyc_output/
+
+# UniApp specific
+.sourcemap/
+.hbuilderx/
