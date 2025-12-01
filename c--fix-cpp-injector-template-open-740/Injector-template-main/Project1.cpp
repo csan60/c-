@@ -1,4 +1,4 @@
-// Project1.cpp : 定义应用程序的入口点。
+﻿// Project1.cpp : 定义应用程序的入口点。
 //
 
 #include "framework.h"
@@ -63,73 +63,85 @@ static CRITICAL_SECTION g_logCS;
 static bool g_logInitialized = false;
 
 // 初始化日志系统
-static void InitLogSystem() {
-    if (g_logInitialized) return;
-    
+static void InitLogSystem()
+{
+    if (g_logInitialized)
+    {
+        return;
+    }
+
     InitializeCriticalSection(&g_logCS);
-    
+
     WCHAR exePath[MAX_PATH] = L"";
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     PathRemoveFileSpecW(exePath);
-    
+
     SYSTEMTIME st;
     GetLocalTime(&st);
-    wsprintfW(g_logFilePath, L"%s\\Injector_Log_%04d%02d%02d_%02d%02d%02d.txt", 
+    wsprintfW(g_logFilePath, L"%s\\Injector_Log_%04d%02d%02d_%02d%02d%02d.txt",
         exePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-    
-    HANDLE hFile = CreateFileW(g_logFilePath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, 
+
+    HANDLE hFile = CreateFileW(g_logFilePath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
         WCHAR header[512];
         wsprintfW(header, L"\xFEFF=== Injector 日志文件 ===\r\n启动时间: %04d-%02d-%02d %02d:%02d:%02d\r\n"
-            L"日志路径: %s\r\n\r\n", 
+            L"日志路径: %s\r\n\r\n",
             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, g_logFilePath);
         DWORD written = 0;
         WriteFile(hFile, header, lstrlenW(header) * sizeof(WCHAR), &written, nullptr);
         CloseHandle(hFile);
     }
-    
+
     g_logInitialized = true;
 }
 
 // 写入日志到文件（线程安全）
-static void WriteLogToFile(const WCHAR* level, const WCHAR* message) {
-    if (!g_logInitialized) return;
-    
+static void WriteLogToFile(const WCHAR* level, const WCHAR* message)
+{
+    if (!g_logInitialized)
+    {
+        return;
+    }
+
     EnterCriticalSection(&g_logCS);
-    
+
     HANDLE hFile = CreateFileW(g_logFilePath, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
         SYSTEMTIME st;
         GetLocalTime(&st);
-        
+
         WCHAR logLine[2048];
         wsprintfW(logLine, L"[%02d:%02d:%02d.%03d] [%s] %s\r\n",
             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, level, message);
-        
+
         DWORD written = 0;
         WriteFile(hFile, logLine, lstrlenW(logLine) * sizeof(WCHAR), &written, nullptr);
         CloseHandle(hFile);
     }
-    
+
     LeaveCriticalSection(&g_logCS);
 }
 
 // 统一日志函数（支持格式化，同时写入控制台和文件）
-static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...) {
+static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...)
+{
     WCHAR message[1024] = {0};
     va_list args;
     va_start(args, fmt);
     _vsnwprintf_s(message, _countof(message), _TRUNCATE, fmt, args);
     va_end(args);
-    
+
     // 写入文件
     WriteLogToFile(level, message);
-    
+
     // 写入控制台（如果存在）
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut && hOut != INVALID_HANDLE_VALUE) {
+    if (hOut && hOut != INVALID_HANDLE_VALUE)
+    {
         WCHAR consoleLine[1280];
         wsprintfW(consoleLine, L"[%s] %s", level, message);
         DWORD written = 0;
@@ -145,12 +157,19 @@ static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...) {
 #define LogDebug(fmt, ...)   LogMessage(L"DEBUG", fmt, ##__VA_ARGS__)
 
 // 调试控制台：创建并输出
-static void SetupDebugConsole() {
-    if (GetConsoleWindow()) return;
-    if (AllocConsole()) {
+static void SetupDebugConsole()
+{
+    if (GetConsoleWindow())
+    {
+        return;
+    }
+
+    if (AllocConsole())
+    {
         SetConsoleTitleW(L"Injector Debug Console");
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (hOut && hOut != INVALID_HANDLE_VALUE) {
+        if (hOut && hOut != INVALID_HANDLE_VALUE)
+        {
             DWORD written = 0;
             WriteConsoleW(hOut, L"[Console] Allocated debug console.\r\n", 37, &written, nullptr);
         }
@@ -159,17 +178,20 @@ static void SetupDebugConsole() {
 }
 
 // 统一打印（宽字符）- 保留向后兼容
-static void DebugPrintFormat(const WCHAR* fmt, ...) {
+static void DebugPrintFormat(const WCHAR* fmt, ...)
+{
     WCHAR line[1024] = {0};
-    va_list args; va_start(args, fmt);
+    va_list args;
+    va_start(args, fmt);
     _vsnwprintf_s(line, _countof(line), _TRUNCATE, fmt, args);
     va_end(args);
-    
+
     // 同时写入日志文件
     WriteLogToFile(L"DEBUG", line);
-    
+
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut && hOut != INVALID_HANDLE_VALUE) {
+    if (hOut && hOut != INVALID_HANDLE_VALUE)
+    {
         DWORD written = 0;
         WriteConsoleW(hOut, line, lstrlenW(line), &written, nullptr);
         WriteConsoleW(hOut, L"\r\n", 2, &written, nullptr);
@@ -638,9 +660,14 @@ static ULONGLONG GetFileSizeU64(const WCHAR* path)
     return size;
 }
 
-static bool IsProcessElevated() {
+static bool IsProcessElevated()
+{
     HANDLE hToken = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return false;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+    {
+        return false;
+    }
+
     TOKEN_ELEVATION elev = {};
     DWORD retLen = 0;
     BOOL ok = GetTokenInformation(hToken, TokenElevation, &elev, sizeof(elev), &retLen);
@@ -648,8 +675,10 @@ static bool IsProcessElevated() {
     return ok && elev.TokenIsElevated;
 }
 
-static void RelaunchSelfElevatedIfNeeded() {
-    if (IsProcessElevated()) {
+static void RelaunchSelfElevatedIfNeeded()
+{
+    if (IsProcessElevated())
+    {
         DebugPrintFormat(L"[Elevation] Already running with administrator privileges.");
         return;
     }
