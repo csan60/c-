@@ -1,4 +1,4 @@
-// Project1.cpp : 定义应用程序的入口点。
+﻿// Project1.cpp : 定义应用程序的入口点。
 //
 
 #include "framework.h"
@@ -20,10 +20,13 @@
 #include <sstream>
 #include <memory>
 #include <cstdio>
+#include <cwchar>
+#include <cwctype>
 using namespace Gdiplus;
 
 static const UINT WM_TRAYICON = WM_APP + 20;
 static const UINT WM_AI_RESPONSE = WM_APP + 21;
+static const UINT_PTR IDT_AI_CLIPBOARD = 0xA110;
 
 enum TrayMenuCommandId
 {
@@ -60,73 +63,85 @@ static CRITICAL_SECTION g_logCS;
 static bool g_logInitialized = false;
 
 // 初始化日志系统
-static void InitLogSystem() {
-    if (g_logInitialized) return;
-    
+static void InitLogSystem()
+{
+    if (g_logInitialized)
+    {
+        return;
+    }
+
     InitializeCriticalSection(&g_logCS);
-    
+
     WCHAR exePath[MAX_PATH] = L"";
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     PathRemoveFileSpecW(exePath);
-    
+
     SYSTEMTIME st;
     GetLocalTime(&st);
-    wsprintfW(g_logFilePath, L"%s\\Injector_Log_%04d%02d%02d_%02d%02d%02d.txt", 
+    wsprintfW(g_logFilePath, L"%s\\Injector_Log_%04d%02d%02d_%02d%02d%02d.txt",
         exePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-    
-    HANDLE hFile = CreateFileW(g_logFilePath, GENERIC_WRITE, FILE_SHARE_READ, nullptr, 
+
+    HANDLE hFile = CreateFileW(g_logFilePath, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
         WCHAR header[512];
         wsprintfW(header, L"\xFEFF=== Injector 日志文件 ===\r\n启动时间: %04d-%02d-%02d %02d:%02d:%02d\r\n"
-            L"日志路径: %s\r\n\r\n", 
+            L"日志路径: %s\r\n\r\n",
             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, g_logFilePath);
         DWORD written = 0;
         WriteFile(hFile, header, lstrlenW(header) * sizeof(WCHAR), &written, nullptr);
         CloseHandle(hFile);
     }
-    
+
     g_logInitialized = true;
 }
 
 // 写入日志到文件（线程安全）
-static void WriteLogToFile(const WCHAR* level, const WCHAR* message) {
-    if (!g_logInitialized) return;
-    
+static void WriteLogToFile(const WCHAR* level, const WCHAR* message)
+{
+    if (!g_logInitialized)
+    {
+        return;
+    }
+
     EnterCriticalSection(&g_logCS);
-    
+
     HANDLE hFile = CreateFileW(g_logFilePath, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile != INVALID_HANDLE_VALUE) {
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
         SYSTEMTIME st;
         GetLocalTime(&st);
-        
+
         WCHAR logLine[2048];
         wsprintfW(logLine, L"[%02d:%02d:%02d.%03d] [%s] %s\r\n",
             st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, level, message);
-        
+
         DWORD written = 0;
         WriteFile(hFile, logLine, lstrlenW(logLine) * sizeof(WCHAR), &written, nullptr);
         CloseHandle(hFile);
     }
-    
+
     LeaveCriticalSection(&g_logCS);
 }
 
 // 统一日志函数（支持格式化，同时写入控制台和文件）
-static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...) {
+static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...)
+{
     WCHAR message[1024] = {0};
     va_list args;
     va_start(args, fmt);
     _vsnwprintf_s(message, _countof(message), _TRUNCATE, fmt, args);
     va_end(args);
-    
+
     // 写入文件
     WriteLogToFile(level, message);
-    
+
     // 写入控制台（如果存在）
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut && hOut != INVALID_HANDLE_VALUE) {
+    if (hOut && hOut != INVALID_HANDLE_VALUE)
+    {
         WCHAR consoleLine[1280];
         wsprintfW(consoleLine, L"[%s] %s", level, message);
         DWORD written = 0;
@@ -142,12 +157,19 @@ static void LogMessage(const WCHAR* level, const WCHAR* fmt, ...) {
 #define LogDebug(fmt, ...)   LogMessage(L"DEBUG", fmt, ##__VA_ARGS__)
 
 // 调试控制台：创建并输出
-static void SetupDebugConsole() {
-    if (GetConsoleWindow()) return;
-    if (AllocConsole()) {
+static void SetupDebugConsole()
+{
+    if (GetConsoleWindow())
+    {
+        return;
+    }
+
+    if (AllocConsole())
+    {
         SetConsoleTitleW(L"Injector Debug Console");
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-        if (hOut && hOut != INVALID_HANDLE_VALUE) {
+        if (hOut && hOut != INVALID_HANDLE_VALUE)
+        {
             DWORD written = 0;
             WriteConsoleW(hOut, L"[Console] Allocated debug console.\r\n", 37, &written, nullptr);
         }
@@ -156,17 +178,20 @@ static void SetupDebugConsole() {
 }
 
 // 统一打印（宽字符）- 保留向后兼容
-static void DebugPrintFormat(const WCHAR* fmt, ...) {
+static void DebugPrintFormat(const WCHAR* fmt, ...)
+{
     WCHAR line[1024] = {0};
-    va_list args; va_start(args, fmt);
+    va_list args;
+    va_start(args, fmt);
     _vsnwprintf_s(line, _countof(line), _TRUNCATE, fmt, args);
     va_end(args);
-    
+
     // 同时写入日志文件
     WriteLogToFile(L"DEBUG", line);
-    
+
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut && hOut != INVALID_HANDLE_VALUE) {
+    if (hOut && hOut != INVALID_HANDLE_VALUE)
+    {
         DWORD written = 0;
         WriteConsoleW(hOut, line, lstrlenW(line), &written, nullptr);
         WriteConsoleW(hOut, L"\r\n", 2, &written, nullptr);
@@ -228,11 +253,18 @@ enum
     IDC_BTN_AI_ASK = 2132,
     IDC_CHK_AUTO_HIDE = 2133,
     IDC_BTN_HIDE_TRAY = 2134,
+    IDC_CHK_AI_AUTO = 2135,
+    IDC_BTN_COPY_ANSWER = 2136,
+    IDC_STATIC_DLL_PATH = 2137,
+    IDC_EDIT_DLL_PATH = 2138,
+    IDC_BTN_BROWSE_DLL = 2139,
 };
 
 // 状态
 static WCHAR g_cxExamPath[MAX_PATH] = L"";
-static WCHAR g_downloadedFile[MAX_PATH] = L"";
+static WCHAR g_localDllPath[MAX_PATH] = L"";
+static WCHAR g_injectedDllPath[MAX_PATH] = L"";
+static bool g_shouldCleanupDll = false;
 static HANDLE g_processHandle = nullptr;
 static DWORD g_processId = 0;
 static bool g_entered = false;
@@ -628,9 +660,14 @@ static ULONGLONG GetFileSizeU64(const WCHAR* path)
     return size;
 }
 
-static bool IsProcessElevated() {
+static bool IsProcessElevated()
+{
     HANDLE hToken = nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return false;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+    {
+        return false;
+    }
+
     TOKEN_ELEVATION elev = {};
     DWORD retLen = 0;
     BOOL ok = GetTokenInformation(hToken, TokenElevation, &elev, sizeof(elev), &retLen);
@@ -638,8 +675,10 @@ static bool IsProcessElevated() {
     return ok && elev.TokenIsElevated;
 }
 
-static void RelaunchSelfElevatedIfNeeded() {
-    if (IsProcessElevated()) {
+static void RelaunchSelfElevatedIfNeeded()
+{
+    if (IsProcessElevated())
+    {
         DebugPrintFormat(L"[Elevation] Already running with administrator privileges.");
         return;
     }
@@ -648,71 +687,116 @@ static void RelaunchSelfElevatedIfNeeded() {
 }
 
 // 检测进程中是否加载了指定模块（按基名匹配，可选完整路径精确匹配）
-static bool IsModuleLoadedInProcess(HANDLE hProcess, const wchar_t* baseName, const wchar_t* fullPathOrNull) {
+static bool IsModuleLoadedInProcess(HANDLE hProcess, const wchar_t* baseName, const wchar_t* fullPathOrNull)
+{
     DWORD needed = 0;
     // 先探测需要的缓冲大小
     EnumProcessModulesEx(hProcess, nullptr, 0, &needed, LIST_MODULES_ALL);
-    if (needed == 0) return false;
+    if (needed == 0)
+    {
+        return false;
+    }
 
     size_t count = needed / sizeof(HMODULE);
     std::vector<HMODULE> mods(count);
-    if (!EnumProcessModulesEx(hProcess, mods.data(), needed, &needed, LIST_MODULES_ALL)) return false;
+    if (!EnumProcessModulesEx(hProcess, mods.data(), needed, &needed, LIST_MODULES_ALL))
+    {
+        return false;
+    }
 
-    for (HMODULE m : mods) {
+    for (HMODULE m : mods)
+    {
         WCHAR path[MAX_PATH] = L"";
-        if (!GetModuleFileNameExW(hProcess, m, path, MAX_PATH)) continue;
+        if (!GetModuleFileNameExW(hProcess, m, path, MAX_PATH))
+        {
+            continue;
+        }
+
         const WCHAR* base = wcsrchr(path, L'\\');
         base = base ? base + 1 : path;
-        if (_wcsicmp(base, baseName) == 0) {
-            if (!fullPathOrNull) return true;
-            if (_wcsicmp(path, fullPathOrNull) == 0) return true;
+
+        if (_wcsicmp(base, baseName) == 0)
+        {
+            if (!fullPathOrNull)
+            {
+                return true;
+            }
+            if (_wcsicmp(path, fullPathOrNull) == 0)
+            {
+                return true;
+            }
         }
     }
     return false;
 }
 
 // 远程注入（CreateRemoteThread + LoadLibraryW）
-static HRESULT InjectDllViaCreateRemoteThread(DWORD pid, const wchar_t* dllPath) {
+static HRESULT InjectDllViaCreateRemoteThread(DWORD pid, const wchar_t* dllPath)
+{
     HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
                                PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, pid);
-    if (!hProc) return HRESULT_FROM_WIN32(GetLastError());
+    if (!hProc)
+    {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
 
     SIZE_T bytes = (wcslen(dllPath) + 1) * sizeof(wchar_t);
     LPVOID remote = VirtualAllocEx(hProc, nullptr, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!remote) { CloseHandle(hProc); return HRESULT_FROM_WIN32(GetLastError()); }
+    if (!remote)
+    {
+        DWORD err = GetLastError();
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
+    }
 
-    if (!WriteProcessMemory(hProc, remote, dllPath, bytes, nullptr)) {
-        DWORD e = GetLastError(); VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-        return HRESULT_FROM_WIN32(e);
+    if (!WriteProcessMemory(hProc, remote, dllPath, bytes, nullptr))
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-    if (k32 == nullptr) {
+    if (!k32)
+    {
         k32 = LoadLibraryW(L"kernel32.dll");
-        if (k32 == nullptr) {
-            VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-            return HRESULT_FROM_WIN32(GetLastError());
-        }
+    }
+
+    if (!k32)
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     FARPROC loadLib = GetProcAddress(k32, "LoadLibraryW");
-    if (!loadLib) {
-        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
+    if (!loadLib)
+    {
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
         return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
 
     HANDLE hThread = CreateRemoteThread(hProc, nullptr, 0,
-                                        (LPTHREAD_START_ROUTINE)loadLib, remote, 0, nullptr);
-    if (!hThread) {
-        DWORD e = GetLastError(); VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-        return HRESULT_FROM_WIN32(e);
+                                        reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLib), remote, 0, nullptr);
+    if (!hThread)
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     WaitForSingleObject(hThread, 10000);
-    DWORD exitCode = 0; GetExitCodeThread(hThread, &exitCode);
+
+    DWORD exitCode = 0;
+    GetExitCodeThread(hThread, &exitCode);
     CloseHandle(hThread);
     VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
     CloseHandle(hProc);
+
     return exitCode ? S_OK : E_FAIL;
 }
 
@@ -733,6 +817,100 @@ static void ApplyFoundPath(HWND hWnd, const WCHAR* path)
     SetStatus(hWnd, L"状态：已找到 CXExam.exe");
 }
 
+static void EnsureDefaultLocalDllPath()
+{
+    if (g_localDllPath[0] != 0)
+        return;
+
+    WCHAR exeDir[MAX_PATH] = L"";
+    if (GetModuleFileNameW(nullptr, exeDir, MAX_PATH) == 0)
+        return;
+    PathRemoveFileSpecW(exeDir);
+
+    WCHAR candidate[MAX_PATH] = L"";
+    if (FAILED(StringCchPrintfW(candidate, _countof(candidate), L"%s\\winmm.dll", exeDir)))
+        return;
+
+    if (FileExistsW(candidate) && GetFileSizeU64(candidate) > 0)
+    {
+        if (FAILED(StringCchCopyW(g_localDllPath, _countof(g_localDllPath), candidate)))
+            return;
+        LogInfo(L"默认检测到本地DLL: %s", g_localDllPath);
+    }
+}
+
+static std::wstring TrimString(const std::wstring& str)
+{
+    size_t start = 0;
+    size_t end = str.length();
+    
+    while (start < end && iswspace(str[start]))
+        start++;
+    
+    while (end > start && iswspace(str[end - 1]))
+        end--;
+    
+    return str.substr(start, end - start);
+}
+
+static bool ReadClipboardText(std::wstring& outText)
+{
+    if (!OpenClipboard(nullptr))
+        return false;
+    
+    bool success = false;
+    HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+    if (hData)
+    {
+        const WCHAR* pText = static_cast<const WCHAR*>(GlobalLock(hData));
+        if (pText)
+        {
+            outText = pText;
+            GlobalUnlock(hData);
+            success = true;
+        }
+    }
+    CloseClipboard();
+    return success;
+}
+
+static bool WriteClipboardText(const std::wstring& text)
+{
+    if (!OpenClipboard(nullptr))
+        return false;
+    
+    EmptyClipboard();
+    
+    size_t size = (text.length() + 1) * sizeof(WCHAR);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+    if (!hMem)
+    {
+        CloseClipboard();
+        return false;
+    }
+    
+    WCHAR* pMem = static_cast<WCHAR*>(GlobalLock(hMem));
+    if (!pMem)
+    {
+        GlobalFree(hMem);
+        CloseClipboard();
+        return false;
+    }
+    
+    wcscpy_s(pMem, text.length() + 1, text.c_str());
+    GlobalUnlock(hMem);
+    
+    if (!SetClipboardData(CF_UNICODETEXT, hMem))
+    {
+        GlobalFree(hMem);
+        CloseClipboard();
+        return false;
+    }
+    
+    CloseClipboard();
+    return true;
+}
+
 static void LoadAiConfig()
 {
     WCHAR configPath[MAX_PATH] = L"";
@@ -744,8 +922,10 @@ static void LoadAiConfig()
     GetPrivateProfileStringW(L"AI", L"ApiKey", L"", g_aiConfig.apiKey, 512, configPath);
     GetPrivateProfileStringW(L"AI", L"Model", g_aiConfig.model, g_aiConfig.model, 128, configPath);
     g_autoHide = GetPrivateProfileIntW(L"Settings", L"AutoHide", 1, configPath) != 0;
+    GetPrivateProfileStringW(L"Injector", L"DllPath", L"", g_localDllPath, MAX_PATH, configPath);
+    EnsureDefaultLocalDllPath();
     
-    LogInfo(L"AI配置已加载: Endpoint=%s, Model=%s, AutoHide=%d", g_aiConfig.endpoint, g_aiConfig.model, g_autoHide);
+    LogInfo(L"AI配置已加载: Endpoint=%s, Model=%s, AutoHide=%d, DllPath=%s", g_aiConfig.endpoint, g_aiConfig.model, g_autoHide, g_localDllPath);
 }
 
 static void SaveAiConfig()
@@ -763,8 +943,10 @@ static void SaveAiConfig()
     wsprintfW(autoHideStr, L"%d", g_autoHide ? 1 : 0);
     WritePrivateProfileStringW(L"Settings", L"AutoHide", autoHideStr, configPath);
     
-    DebugPrintFormat(L"[Config] Saved: Endpoint=%ls, Model=%ls, AutoHide=%d", 
-        g_aiConfig.endpoint, g_aiConfig.model, g_autoHide);
+    WritePrivateProfileStringW(L"Injector", L"DllPath", g_localDllPath, configPath);
+    
+    DebugPrintFormat(L"[Config] Saved: Endpoint=%ls, Model=%ls, AutoHide=%d, DllPath=%ls", 
+        g_aiConfig.endpoint, g_aiConfig.model, g_autoHide, g_localDllPath);
 }
 
 static bool CreateTrayIcon(HWND hwnd)
@@ -1498,6 +1680,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                             WS_CHILD | WS_VISIBLE,
                             8, 92, 614, 22, hWnd, (HMENU)IDC_STATIC_STATUS, hInst, nullptr);
 
+                        EnsureDefaultLocalDllPath();
+
+                        HWND hDllLabel = CreateWindowW(L"STATIC", L"本地DLL路径：",
+                            WS_CHILD | WS_VISIBLE,
+                            8, 152, 120, 20, hWnd, (HMENU)IDC_STATIC_DLL_PATH, hInst, nullptr);
+                        UNREFERENCED_PARAMETER(hDllLabel);
+
+                        HWND hDllEdit = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
+                            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_READONLY,
+                            8, 172, 360, 24, hWnd, (HMENU)IDC_EDIT_DLL_PATH, hInst, nullptr);
+                        if (hDllEdit && g_localDllPath[0])
+                        {
+                            SetWindowTextW(hDllEdit, g_localDllPath);
+                        }
+
+                        CreateWindowW(L"BUTTON", L"选择DLL...",
+                            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                            376, 172, 112, 24, hWnd, (HMENU)IDC_BTN_BROWSE_DLL, hInst, nullptr);
+
                         CreateWindowW(L"BUTTON", L"AI配置",
                             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                             8, 120, 100, 26, hWnd, (HMENU)IDC_BTN_AI_CONFIG, hInst, nullptr);
@@ -1551,6 +1752,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     }
                 }
                 break;
+            case IDC_BTN_BROWSE_DLL:
+                {
+                    OPENFILENAMEW ofn = {};
+                    WCHAR filePath[MAX_PATH] = L"";
+                    WCHAR filter[] = L"动态链接库 (*.dll)\0*.dll\0所有文件 (*.*)\0*.*\0\0";
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hWnd;
+                    ofn.lpstrFilter = filter;
+                    ofn.lpstrFile = filePath;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                    if (GetOpenFileNameW(&ofn))
+                    {
+                        if (FileExistsW(filePath) && GetFileSizeU64(filePath) > 0)
+                        {
+                            lstrcpynW(g_localDllPath, filePath, MAX_PATH);
+                            SetWindowTextW(GetDlgItem(hWnd, IDC_EDIT_DLL_PATH), g_localDllPath);
+                            SaveAiConfig();
+                            SetWindowTextW(GetDlgItem(hWnd, IDC_STATIC_STATUS), L"状态：DLL路径已更新");
+                            LogInfo(L"用户选择DLL: %s", g_localDllPath);
+                        }
+                        else
+                        {
+                            MessageBoxW(hWnd, L"选择的DLL文件无效或为空", L"提示", MB_OK | MB_ICONWARNING);
+                        }
+                    }
+                }
+                break;
             // 已移除下载按钮逻辑（合并至启动流程）
             case IDC_BTN_LAUNCH:
         {
@@ -1580,57 +1809,78 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
             LogInfo(L"DLL 目标路径: %s", target);
 
-            // 若 winmm.dll 已存在且非空，跳过下载
-            if (FileExistsW(target) && GetFileSizeU64(target) > 0)
+            // 使用本地DLL（不从服务器下载）
+            g_shouldCleanupDll = false;
+            g_injectedDllPath[0] = L'\0';
+            
+            EnsureDefaultLocalDllPath();
+            
+            WCHAR sourceDll[MAX_PATH] = L"";
+            if (g_localDllPath[0] != L'\0' && FileExistsW(g_localDllPath) && GetFileSizeU64(g_localDllPath) > 0)
             {
-                if (FAILED(StringCchCopyW(g_downloadedFile, _countof(g_downloadedFile), target))) {
-                    SetStatus(hWnd, L"状态：内部路径设置失败");
-                    DebugPrintFormat(L"[Launch] Failed to set downloaded file path.");
-                    break;
-                }
-                DebugPrintFormat(L"[Download] Local dll exists, skip download: %ls", target);
-                SetStatus(hWnd, L"状态：资源已就绪，正在启动...");
+                StringCchCopyW(sourceDll, _countof(sourceDll), g_localDllPath);
+                LogInfo(L"使用配置的DLL路径: %s", sourceDll);
+            }
+            else if (FileExistsW(target) && GetFileSizeU64(target) > 0)
+            {
+                LogInfo(L"目标目录已存在DLL，直接使用: %s", target);
+                StringCchCopyW(g_injectedDllPath, _countof(g_injectedDllPath), target);
+                g_shouldCleanupDll = false;
+                SetStatus(hWnd, L"状态：DLL已就绪，正在启动...");
             }
             else
             {
-                const WCHAR* kUrl = L"https://8.141.118.244:10030/down/QCmrBzK1rgqN.dll";
-                SetStatus(hWnd, L"状态：下载资源中...");
-                DebugPrintFormat(L"[Download] URL -> %s", kUrl);
-                DebugPrintFormat(L"[Download] Target -> %s", target);
-
-                auto TryDownloadSilently = [&](const WCHAR* dst)->HRESULT {
-                    HRESULT hr = DownloadFileWinHttp(kUrl, dst, false);
-                    if (FAILED(hr)) hr = DownloadFileWinHttp(kUrl, dst, true);
-                    if (FAILED(hr)) hr = DownloadFileWinInet(kUrl, dst, true);
-                    return hr;
-                };
-
-                DWORD attrsPre = GetFileAttributesW(target);
-                if (attrsPre != INVALID_FILE_ATTRIBUTES && (attrsPre & FILE_ATTRIBUTE_READONLY))
+                SetStatus(hWnd, L"状态：本地DLL不存在");
+                LogError(L"找不到可用的DLL文件，配置路径: %s，目标路径: %s", g_localDllPath, target);
+                WCHAR errMsg[768];
+                wsprintfW(errMsg, 
+                    L"错误：找不到本地DLL文件\n\n"
+                    L"配置的DLL路径: %s\n"
+                    L"目标路径: %s\n\n"
+                    L"解决方案：\n"
+                    L"1. 点击\"选择DLL...\"按钮选择 winmm.dll 文件\n"
+                    L"2. 或将 winmm.dll 放置在注入器同目录下",
+                    g_localDllPath[0] ? g_localDllPath : L"(未配置)", target);
+                MessageBoxW(hWnd, errMsg, L"DLL文件缺失", MB_OK | MB_ICONERROR);
+                break;
+            }
+            
+            if (sourceDll[0] != L'\0')
+            {
+                if (_wcsicmp(sourceDll, target) == 0)
                 {
-                    SetFileAttributesW(target, attrsPre & ~FILE_ATTRIBUTE_READONLY);
-                    DebugPrintFormat(L"[Download] Removed READONLY on %s", target);
-                }
-                DeleteFileW(target);
-
-                HRESULT hr = TryDownloadSilently(target);
-                DebugPrintFormat(L"[Download] Result hr=0x%08X", hr);
-
-                if (SUCCEEDED(hr) && FileExistsW(target) && GetFileSizeU64(target) > 0)
-                {
-                    if (FAILED(StringCchCopyW(g_downloadedFile, _countof(g_downloadedFile), target))) {
-                        SetStatus(hWnd, L"状态：内部路径设置失败");
-                        DebugPrintFormat(L"[Download] Failed to set downloaded file path.");
-                        break;
-                    }
-                    SetStatus(hWnd, L"状态：资源已就绪，正在启动...");
-                    DebugPrintFormat(L"[Download] Ready. file=%s size=%llu", g_downloadedFile, GetFileSizeU64(g_downloadedFile));
+                    LogInfo(L"源DLL路径与目标路径相同，无需复制: %s", target);
+                    StringCchCopyW(g_injectedDllPath, _countof(g_injectedDllPath), target);
+                    g_shouldCleanupDll = false;
+                    SetStatus(hWnd, L"状态：DLL已就绪，正在启动...");
                 }
                 else
                 {
-                    SetStatus(hWnd, L"状态：资源下载失败，尝试直接启动...");
-                    g_downloadedFile[0] = L'\0';
-                    DebugPrintFormat(L"[Download] Failed. hr=0x%08X, will try launch anyway.", hr);
+                    DWORD attrsPre = GetFileAttributesW(target);
+                    if (attrsPre != INVALID_FILE_ATTRIBUTES && (attrsPre & FILE_ATTRIBUTE_READONLY))
+                    {
+                        SetFileAttributesW(target, attrsPre & ~FILE_ATTRIBUTE_READONLY);
+                        LogInfo(L"移除只读属性: %s", target);
+                    }
+                    
+                    if (CopyFileW(sourceDll, target, FALSE))
+                    {
+                        LogInfo(L"已复制DLL: %s -> %s", sourceDll, target);
+                        StringCchCopyW(g_injectedDllPath, _countof(g_injectedDllPath), target);
+                        g_shouldCleanupDll = true;
+                        SetStatus(hWnd, L"状态：DLL已复制，正在启动...");
+                    }
+                    else
+                    {
+                        DWORD err = GetLastError();
+                        LogError(L"复制DLL失败，错误代码: %lu", err);
+                        SetStatus(hWnd, L"状态：DLL复制失败");
+                        WCHAR errMsg[512];
+                        wsprintfW(errMsg, L"无法复制DLL到目标目录\n错误代码: %lu\n\n源: %s\n目标: %s", 
+                            err, sourceDll, target);
+                        MessageBoxW(hWnd, errMsg, L"复制失败", MB_OK | MB_ICONERROR);
+                        break;
+                    }
                 }
             }
 
@@ -1727,11 +1977,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     CloseHandle(g_processHandle);
                     g_processHandle = nullptr;
                 }
-                if (lstrlenW(g_downloadedFile) > 0)
+                if (g_shouldCleanupDll && g_injectedDllPath[0])
                 {
-                    DeleteFileW(g_downloadedFile);
-                    DebugPrintFormat(L"[Cleanup] Deleted %s", g_downloadedFile);
-                    g_downloadedFile[0] = L'\0';
+                    if (DeleteFileW(g_injectedDllPath))
+                    {
+                        DebugPrintFormat(L"[Cleanup] Deleted %s", g_injectedDllPath);
+                    }
+                    else
+                    {
+                        DebugPrintFormat(L"[Cleanup] Failed to delete %s (err=%lu)", g_injectedDllPath, GetLastError());
+                    }
+                    g_injectedDllPath[0] = L'\0';
+                    g_shouldCleanupDll = false;
                 }
                 PostMessageW(hwndMain, WM_APP + 1, 0, 0);
                 return 0;
@@ -1979,6 +2236,8 @@ LRESULT CALLBACK AiConfigWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
 struct AiHelperContext
 {
     bool busy;
+    bool autoMode;
+    std::wstring lastClipboard;
 };
 
 LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1991,6 +2250,8 @@ LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         {
             ctx = new AiHelperContext();
             ctx->busy = false;
+            ctx->autoMode = false;
+            ctx->lastClipboard.clear();
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(ctx));
 
             CreateWindowW(L"STATIC", L"输入题目:", WS_CHILD | WS_VISIBLE,
@@ -2003,6 +2264,12 @@ LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
             CreateWindowW(L"BUTTON", L"AI解答 (F5)", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
                 8, 190, 140, 30, hWnd, (HMENU)IDC_BTN_AI_ASK, hInst, nullptr);
 
+            CreateWindowW(L"BUTTON", L"复制答案", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                156, 190, 100, 30, hWnd, (HMENU)IDC_BTN_COPY_ANSWER, hInst, nullptr);
+
+            CreateWindowW(L"BUTTON", L"自动监听剪贴板", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                268, 196, 180, 20, hWnd, (HMENU)IDC_CHK_AI_AUTO, hInst, nullptr);
+
             CreateWindowW(L"STATIC", L"AI答案:", WS_CHILD | WS_VISIBLE,
                 8, 232, 80, 20, hWnd, nullptr, hInst, nullptr);
 
@@ -2014,76 +2281,123 @@ LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         }
         break;
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDC_BTN_AI_ASK)
         {
-            if (ctx && ctx->busy)
+            int wmId = LOWORD(wParam);
+            switch (wmId)
             {
+            case IDC_BTN_AI_ASK:
+                {
+                    if (ctx && ctx->busy)
+                    {
+                        break;
+                    }
+
+                    WCHAR question[4096] = L"";
+                    GetWindowTextW(GetDlgItem(hWnd, IDC_EDIT_AI_QUESTION), question, 4096);
+                    if (wcslen(question) == 0)
+                    {
+                        MessageBoxW(hWnd, L"请先输入题目内容。", L"提示", MB_OK | MB_ICONWARNING);
+                        break;
+                    }
+
+                    HWND hAnswer = GetDlgItem(hWnd, IDC_EDIT_AI_ANSWER);
+                    if (hAnswer)
+                    {
+                        SetWindowTextW(hAnswer, L"正在与AI接口通讯，请稍候...");
+                    }
+                    HWND hBtnAsk = GetDlgItem(hWnd, IDC_BTN_AI_ASK);
+                    if (hBtnAsk)
+                    {
+                        EnableWindow(hBtnAsk, FALSE);
+                    }
+                    if (ctx)
+                    {
+                        ctx->busy = true;
+                    }
+
+                    struct AiHelperRequest
+                    {
+                        HWND hwnd;
+                        std::wstring prompt;
+                    };
+
+                    AiHelperRequest* req = new AiHelperRequest{ hWnd, std::wstring(question) };
+                    HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param)->DWORD {
+                        AiHelperRequest* request = static_cast<AiHelperRequest*>(param);
+                        HWND targetWnd = request->hwnd;
+                        std::wstring prompt = request->prompt;
+                        delete request;
+
+                        std::wstring fullPrompt = L"你是一个专业的答题助手，请结合题意给出详细的分析步骤和最终答案。\n\n题目：\n" + prompt;
+                        std::wstring result = CallAiApi(fullPrompt);
+
+                        AiResponsePayload* payload = new AiResponsePayload{ true, result };
+                        if (!PostMessageW(targetWnd, WM_AI_RESPONSE, 1, (LPARAM)payload))
+                        {
+                            delete payload;
+                        }
+                        return 0;
+                    }, req, 0, nullptr);
+
+                    if (!hThread)
+                    {
+                        delete req;
+                        if (ctx)
+                        {
+                            ctx->busy = false;
+                        }
+                        if (hBtnAsk)
+                        {
+                            EnableWindow(hBtnAsk, TRUE);
+                        }
+                        MessageBoxW(hWnd, L"无法创建AI请求线程。", L"错误", MB_OK | MB_ICONERROR);
+                    }
+                    else
+                    {
+                        CloseHandle(hThread);
+                    }
+                }
                 break;
-            }
-
-            WCHAR question[4096] = L"";
-            GetWindowTextW(GetDlgItem(hWnd, IDC_EDIT_AI_QUESTION), question, 4096);
-            if (wcslen(question) == 0)
-            {
-                MessageBoxW(hWnd, L"请先输入题目内容。", L"提示", MB_OK | MB_ICONWARNING);
+            case IDC_BTN_COPY_ANSWER:
+                {
+                    WCHAR answer[8192] = L"";
+                    GetWindowTextW(GetDlgItem(hWnd, IDC_EDIT_AI_ANSWER), answer, 8192);
+                    if (wcslen(answer) > 0)
+                    {
+                        if (WriteClipboardText(answer))
+                        {
+                            MessageBoxW(hWnd, L"答案已复制到剪贴板。", L"成功", MB_OK | MB_ICONINFORMATION);
+                        }
+                        else
+                        {
+                            MessageBoxW(hWnd, L"复制失败。", L"错误", MB_OK | MB_ICONERROR);
+                        }
+                    }
+                }
                 break;
-            }
-
-            HWND hAnswer = GetDlgItem(hWnd, IDC_EDIT_AI_ANSWER);
-            if (hAnswer)
-            {
-                SetWindowTextW(hAnswer, L"正在与AI接口通讯，请稍候...");
-            }
-            HWND hBtnAsk = GetDlgItem(hWnd, IDC_BTN_AI_ASK);
-            if (hBtnAsk)
-            {
-                EnableWindow(hBtnAsk, FALSE);
-            }
-            if (ctx)
-            {
-                ctx->busy = true;
-            }
-
-            struct AiHelperRequest
-            {
-                HWND hwnd;
-                std::wstring prompt;
-            };
-
-            AiHelperRequest* req = new AiHelperRequest{ hWnd, std::wstring(question) };
-            HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param)->DWORD {
-                AiHelperRequest* request = static_cast<AiHelperRequest*>(param);
-                HWND targetWnd = request->hwnd;
-                std::wstring prompt = request->prompt;
-                delete request;
-
-                std::wstring fullPrompt = L"你是一个专业的答题助手，请结合题意给出详细的分析步骤和最终答案。\n\n题目：\n" + prompt;
-                std::wstring result = CallAiApi(fullPrompt);
-
-                AiResponsePayload* payload = new AiResponsePayload{ true, result };
-                if (!PostMessageW(targetWnd, WM_AI_RESPONSE, 1, (LPARAM)payload))
+            case IDC_CHK_AI_AUTO:
                 {
-                    delete payload;
+                    if (!ctx) break;
+                    HWND hChk = GetDlgItem(hWnd, IDC_CHK_AI_AUTO);
+                    if (!hChk) break;
+                    
+                    LRESULT state = SendMessageW(hChk, BM_GETCHECK, 0, 0);
+                    ctx->autoMode = (state == BST_CHECKED);
+                    
+                    if (ctx->autoMode)
+                    {
+                        ctx->lastClipboard.clear();
+                        SetTimer(hWnd, IDT_AI_CLIPBOARD, 1000, nullptr);
+                        LogInfo(L"AI自动监听已启动");
+                        MessageBoxW(hWnd, L"自动监听已启动！\n复制题目到剪贴板，AI将自动解答。", L"提示", MB_OK | MB_ICONINFORMATION);
+                    }
+                    else
+                    {
+                        KillTimer(hWnd, IDT_AI_CLIPBOARD);
+                        LogInfo(L"AI自动监听已停止");
+                    }
                 }
-                return 0;
-            }, req, 0, nullptr);
-
-            if (!hThread)
-            {
-                delete req;
-                if (ctx)
-                {
-                    ctx->busy = false;
-                }
-                if (hBtnAsk)
-                {
-                    EnableWindow(hBtnAsk, TRUE);
-                }
-                MessageBoxW(hWnd, L"无法创建AI请求线程。", L"错误", MB_OK | MB_ICONERROR);
-            }
-            else
-            {
-                CloseHandle(hThread);
+                break;
             }
         }
         break;
@@ -2111,6 +2425,34 @@ LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
             }
         }
         break;
+    case WM_TIMER:
+        if (wParam == IDT_AI_CLIPBOARD)
+        {
+            if (!ctx || !ctx->autoMode || ctx->busy)
+                break;
+
+            std::wstring clipText;
+            if (!ReadClipboardText(clipText))
+                break;
+
+            std::wstring trimmed = TrimString(clipText);
+            if (trimmed.empty())
+                break;
+
+            if (ctx->lastClipboard == trimmed)
+                break;
+
+            ctx->lastClipboard = trimmed;
+
+            HWND hQuestion = GetDlgItem(hWnd, IDC_EDIT_AI_QUESTION);
+            if (hQuestion)
+            {
+                SetWindowTextW(hQuestion, trimmed.c_str());
+            }
+
+            SendMessageW(hWnd, WM_COMMAND, MAKEWPARAM(IDC_BTN_AI_ASK, BN_CLICKED), 0);
+        }
+        break;
     case WM_SIZE:
         {
             RECT rc;
@@ -2134,6 +2476,10 @@ LRESULT CALLBACK AiHelperWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
     case WM_DESTROY:
         if (ctx)
         {
+            if (ctx->autoMode)
+            {
+                KillTimer(hWnd, IDT_AI_CLIPBOARD);
+            }
             delete ctx;
             SetWindowLongPtrW(hWnd, GWLP_USERDATA, 0);
         }
