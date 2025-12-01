@@ -1,8 +1,0 @@
-{
-  "navigationBarBackgroundColor": "#EF96C5",
-  "navigationBarTextStyle": "white",
-  "navigationBarTitleText": "咨询师展示",
-  "usingComponents": {
-    "mescroll-uni": "/components/mescroll-uni/mescroll-uni"
-  }
-}
