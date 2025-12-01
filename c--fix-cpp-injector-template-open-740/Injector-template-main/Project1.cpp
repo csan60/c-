@@ -20,6 +20,7 @@
 #include <sstream>
 #include <memory>
 #include <cstdio>
+#include <cwchar>
 #include <cwctype>
 using namespace Gdiplus;
 
@@ -657,71 +658,116 @@ static void RelaunchSelfElevatedIfNeeded() {
 }
 
 // 检测进程中是否加载了指定模块（按基名匹配，可选完整路径精确匹配）
-static bool IsModuleLoadedInProcess(HANDLE hProcess, const wchar_t* baseName, const wchar_t* fullPathOrNull) {
+static bool IsModuleLoadedInProcess(HANDLE hProcess, const wchar_t* baseName, const wchar_t* fullPathOrNull)
+{
     DWORD needed = 0;
     // 先探测需要的缓冲大小
     EnumProcessModulesEx(hProcess, nullptr, 0, &needed, LIST_MODULES_ALL);
-    if (needed == 0) return false;
+    if (needed == 0)
+    {
+        return false;
+    }
 
     size_t count = needed / sizeof(HMODULE);
     std::vector<HMODULE> mods(count);
-    if (!EnumProcessModulesEx(hProcess, mods.data(), needed, &needed, LIST_MODULES_ALL)) return false;
+    if (!EnumProcessModulesEx(hProcess, mods.data(), needed, &needed, LIST_MODULES_ALL))
+    {
+        return false;
+    }
 
-    for (HMODULE m : mods) {
+    for (HMODULE m : mods)
+    {
         WCHAR path[MAX_PATH] = L"";
-        if (!GetModuleFileNameExW(hProcess, m, path, MAX_PATH)) continue;
+        if (!GetModuleFileNameExW(hProcess, m, path, MAX_PATH))
+        {
+            continue;
+        }
+
         const WCHAR* base = wcsrchr(path, L'\\');
         base = base ? base + 1 : path;
-        if (_wcsicmp(base, baseName) == 0) {
-            if (!fullPathOrNull) return true;
-            if (_wcsicmp(path, fullPathOrNull) == 0) return true;
+
+        if (_wcsicmp(base, baseName) == 0)
+        {
+            if (!fullPathOrNull)
+            {
+                return true;
+            }
+            if (_wcsicmp(path, fullPathOrNull) == 0)
+            {
+                return true;
+            }
         }
     }
     return false;
 }
 
 // 远程注入（CreateRemoteThread + LoadLibraryW）
-static HRESULT InjectDllViaCreateRemoteThread(DWORD pid, const wchar_t* dllPath) {
+static HRESULT InjectDllViaCreateRemoteThread(DWORD pid, const wchar_t* dllPath)
+{
     HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION |
                                PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, pid);
-    if (!hProc) return HRESULT_FROM_WIN32(GetLastError());
+    if (!hProc)
+    {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
 
     SIZE_T bytes = (wcslen(dllPath) + 1) * sizeof(wchar_t);
     LPVOID remote = VirtualAllocEx(hProc, nullptr, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!remote) { CloseHandle(hProc); return HRESULT_FROM_WIN32(GetLastError()); }
+    if (!remote)
+    {
+        DWORD err = GetLastError();
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
+    }
 
-    if (!WriteProcessMemory(hProc, remote, dllPath, bytes, nullptr)) {
-        DWORD e = GetLastError(); VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-        return HRESULT_FROM_WIN32(e);
+    if (!WriteProcessMemory(hProc, remote, dllPath, bytes, nullptr))
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     HMODULE k32 = GetModuleHandleW(L"kernel32.dll");
-    if (k32 == nullptr) {
+    if (!k32)
+    {
         k32 = LoadLibraryW(L"kernel32.dll");
-        if (k32 == nullptr) {
-            VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-            return HRESULT_FROM_WIN32(GetLastError());
-        }
+    }
+
+    if (!k32)
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     FARPROC loadLib = GetProcAddress(k32, "LoadLibraryW");
-    if (!loadLib) {
-        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
+    if (!loadLib)
+    {
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
         return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
     }
 
     HANDLE hThread = CreateRemoteThread(hProc, nullptr, 0,
-                                        (LPTHREAD_START_ROUTINE)loadLib, remote, 0, nullptr);
-    if (!hThread) {
-        DWORD e = GetLastError(); VirtualFreeEx(hProc, remote, 0, MEM_RELEASE); CloseHandle(hProc);
-        return HRESULT_FROM_WIN32(e);
+                                        reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLib), remote, 0, nullptr);
+    if (!hThread)
+    {
+        DWORD err = GetLastError();
+        VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return HRESULT_FROM_WIN32(err);
     }
 
     WaitForSingleObject(hThread, 10000);
-    DWORD exitCode = 0; GetExitCodeThread(hThread, &exitCode);
+
+    DWORD exitCode = 0;
+    GetExitCodeThread(hThread, &exitCode);
     CloseHandle(hThread);
     VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
     CloseHandle(hProc);
+
     return exitCode ? S_OK : E_FAIL;
 }
 
