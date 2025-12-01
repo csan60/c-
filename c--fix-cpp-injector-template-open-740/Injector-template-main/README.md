@@ -49,6 +49,9 @@ DLL文件来源于[cef_cx_copy_tool](https://github.com/SJYssr/cef_cx_copy_tool)
 4. AI自动解答并显示答案
 5. [可选] 点击"复制答案"将结果复制回剪贴板
 
+> **如何设置API Key？**
+> - 推荐阅读：[API_KEY_设置指南.md](API_KEY_设置指南.md)
+
 详细使用说明请查看：[LOCAL_DLL_README.md](LOCAL_DLL_README.md)
 
 ## 注意事项
