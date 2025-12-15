@@ -1,0 +1,38 @@
+# uni-app
+/unpackage/
+/node_modules/
+.DS_Store
+
+# Java / Maven
+/server_code/target/
+/server_code/.mvn/
+/server_code/mvnw
+/server_code/mvnw.cmd
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.hbuilderx/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.bak
+*.orig
+
+# Sensitive configuration files (keep structure but ignore with credentials)
+# Note: Actual project has credentials in application.yml and application.properties
+# In production, these should be managed via environment variables or secret management
